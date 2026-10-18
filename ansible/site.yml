@@ -1,0 +1,6 @@
+- name: Bootstrap Kubernetes-ready nodes
+  hosts: k8s_nodes
+  become: true
+  roles:
+    - docker
+    - k8s-prereqs
