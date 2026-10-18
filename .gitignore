@@ -1,0 +1,28 @@
+# Python
+__pycache__/
+*.pyc
+.venv/
+.env
+
+# Docker / compose
+docker-compose.override.yml
+
+# K8s / Helm
+*.tgz
+helm/myapp/charts/
+
+# Secrets
+*.secret.yaml
+*.pem
+kubeconfig*
+
+# Ansible
+ansible/retry/
+ansible/*.retry
+ansible/inventory/hosts.local
+
+# OS / editor
+.DS_Store
+.idea/
+.vscode/
+*.log
