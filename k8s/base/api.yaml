@@ -1,0 +1,31 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: product-api
+  namespace: shop
+spec:
+  replicas: 2
+  selector: { matchLabels: { app: product-api } }
+  template:
+    metadata: { labels: { app: product-api } }
+    spec:
+      containers:
+        - name: api
+          image: ghcr.io/CHANGE_ME/product-api:dev
+          ports: [{ containerPort: 8080 }]
+          envFrom: [{ configMapRef: { name: api-config } }]
+          readinessProbe:
+            httpGet: { path: /healthz, port: 8080 }
+            initialDelaySeconds: 3
+          resources:
+            requests: { cpu: 50m, memory: 64Mi }
+            limits:   { cpu: 250m, memory: 128Mi }
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: product-api
+  namespace: shop
+spec:
+  selector: { app: product-api }
+  ports: [{ port: 80, targetPort: 8080 }]

@@ -18,3 +18,11 @@
 - Trigger: GitHub webhook on push
 - Stages: test → build → push image → **update helm values.yaml in Git**
 - CI produces artifacts and bumps the GitOps desired state
+
+
+## Phase 4 — Kubernetes
+
+- Raw manifests under `k8s/base`
+- Local cluster: `kind create cluster --config kind-config.yaml`
+- Apply: `kubectl apply -f k8s/base/`
+- Practiced scale, rolling update, rollback
