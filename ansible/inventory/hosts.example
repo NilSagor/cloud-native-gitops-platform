@@ -1,19 +1,13 @@
-# Copy to `hosts` (gitignored) and edit. Ubuntu 22.04+ hosts only.
+# ansible/inventory/hosts.example
+#
+# Copy to `hosts` (gitignored) and replace the IP/key below.
 #
 #   cp ansible/inventory/hosts.example ansible/inventory/hosts
 #
-# Works the same for on-prem VMs and AWS EC2 instances: use the instance's
-# public/private IP as ansible_host and the AMI's default user (ubuntu for
-# Canonical Ubuntu AMIs), with the key pair passed via ansible_ssh_private_key_file.
-
+# Works for Multipass VMs, on-prem Ubuntu, and AWS EC2 (Ubuntu AMIs):
+#   - ansible_host            = VM / instance IP
+#   - ansible_user            = `ubuntu` (default on both Multipass and Canonical AMIs)
+#   - ansible_ssh_private_key_file = path to your key on this machine
 
 [k8s_nodes]
-localhost ansible_connection=local ansible_user=nilsagor
-
-[k8s_nodes:vars]
-docker_users=["nilsagor"]
-# node2 ansible_host=192.168.1.11 ansible_user=ubuntu
-
-#[k8s_nodes:vars]
-# Users added to the docker group (they must log out/in for it to take effect).
-docker_users=["ubuntu"]
+k8s-node ansible_host=192.168.64.5 ansible_user=ubuntu ansible_ssh_private_key_file=~/.ssh/id_multipass

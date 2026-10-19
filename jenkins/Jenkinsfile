@@ -1,0 +1,132 @@
+// Declarative CI pipeline: test -> build -> push -> bump the GitOps desired state.
+//
+// Required Jenkins credentials (Username with password):
+//   ghcr         GitHub user + PAT with write:packages   (push images)
+//   github-push  GitHub user + PAT with repo write       (push the values.yaml bump)
+//
+// The image repository is read from helm/myapp/values.yaml, so there is a single
+// source of truth and no GH_USER variable to keep in sync.
+pipeline {
+  agent any
+
+  options {
+    timestamps()
+    disableConcurrentBuilds()
+    timeout(time: 30, unit: 'MINUTES')
+    buildDiscarder(logRotator(numToKeepStr: '20'))
+  }
+
+  environment {
+    REGISTRY    = 'ghcr.io'
+    HELM_VALUES = 'helm/myapp/values.yaml'
+    BOT_NAME    = 'Jenkins CI'
+    BOT_EMAIL   = 'jenkins@ci.local'
+  }
+
+  stages {
+    stage('Prepare') {
+      steps {
+        script {
+          // The bump commit below triggers this pipeline again via the webhook.
+          // Stop right here for commits authored by the bot, or CI loops forever.
+          def author = sh(returnStdout: true, script: 'git log -1 --pretty=%an').trim()
+          env.SKIP_BUILD = (author == env.BOT_NAME) ? 'true' : 'false'
+          if (env.SKIP_BUILD == 'true') {
+            currentBuild.result = 'NOT_BUILT'
+            echo "Latest commit was authored by ${env.BOT_NAME}; skipping."
+            return
+          }
+          env.TAG = env.GIT_COMMIT.take(7)
+          def repo = sh(
+            returnStdout: true,
+            script: '''awk '/^  repository:/ {print $2; exit}' helm/myapp/values.yaml'''
+          ).trim()
+          if (!repo || repo.contains('YOUR_GH_USER')) {
+            error("Set image.repository in ${env.HELM_VALUES} (run `make configure GH_USER=<you>`).")
+          }
+          env.IMAGE = "${repo}:${env.TAG}"
+        }
+      }
+    }
+
+    stage('Test') {
+      when { environment name: 'SKIP_BUILD', value: 'false' }
+      steps {
+        // Lint + pytest run inside the Dockerfile's `test` stage: no Python needed on the agent.
+        sh 'docker build --target test -t product-api-test:${TAG} app/'
+      }
+    }
+
+    stage('Build image') {
+      when { environment name: 'SKIP_BUILD', value: 'false' }
+      steps {
+        sh 'docker build --target runtime -t "$IMAGE" app/'
+      }
+    }
+
+    stage('Push image') {
+      when {
+        allOf {
+          environment name: 'SKIP_BUILD', value: 'false'
+          expression { env.BRANCH_NAME == 'main' || env.GIT_BRANCH in ['origin/main', 'main'] }
+        }
+      }
+      steps {
+        withCredentials([usernamePassword(credentialsId: 'ghcr',
+                                          usernameVariable: 'GHCR_USER',
+                                          passwordVariable: 'GHCR_TOKEN')]) {
+          sh '''
+            echo "$GHCR_TOKEN" | docker login "$REGISTRY" -u "$GHCR_USER" --password-stdin
+            docker push "$IMAGE"
+          '''
+        }
+      }
+    }
+
+    stage('Bump GitOps tag') {
+      when {
+        allOf {
+          environment name: 'SKIP_BUILD', value: 'false'
+          expression { env.BRANCH_NAME == 'main' || env.GIT_BRANCH in ['origin/main', 'main'] }
+        }
+      }
+      steps {
+        withCredentials([usernamePassword(credentialsId: 'github-push',
+                                          usernameVariable: 'GIT_USER',
+                                          passwordVariable: 'GIT_TOKEN')]) {
+          sh '''
+            set -eu
+            git config user.name  "$BOT_NAME"
+            git config user.email "$BOT_EMAIL"
+
+            # Build from the freshest main so the bump never clobbers newer commits.
+            git fetch origin main
+            git checkout -B main origin/main
+
+            # Rewrite only `tag:` inside the top-level `image:` block. Quoted so a
+            # numeric-looking SHA (e.g. 1234567 or 123e456) is never parsed as a number.
+            sed -i "/^image:/,/^[^[:space:]#]/ s|^  tag:.*|  tag: \\"${TAG}\\"|" "$HELM_VALUES"
+            grep -q "^  tag: \\"${TAG}\\"" "$HELM_VALUES"
+
+            if git diff --quiet -- "$HELM_VALUES"; then
+              echo "values.yaml already at ${TAG}; nothing to commit."
+              exit 0
+            fi
+
+            git commit -m "ci: bump product-api to ${TAG}" -- "$HELM_VALUES"
+
+            # Credentials are fed through a helper so the token never lands in the URL or logs.
+            git -c credential.helper='!f() { echo "username=${GIT_USER}"; echo "password=${GIT_TOKEN}"; }; f' \
+              push origin HEAD:refs/heads/main
+          '''
+        }
+      }
+    }
+  }
+
+  post {
+    always {
+      sh 'docker logout "$REGISTRY" || true'
+    }
+  }
+}
