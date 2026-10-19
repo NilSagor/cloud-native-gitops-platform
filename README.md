@@ -10,3 +10,11 @@
 
 - `ansible/site.yml` prepares Ubuntu VMs: Docker + Kubernetes kernel prerequisites
 - Usage: `ansible-playbook -i ansible/inventory/hosts ansible/site.yml`
+
+
+## Phase 3 — Jenkins CI
+
+- `jenkins/Jenkinsfile` — declarative pipeline
+- Trigger: GitHub webhook on push
+- Stages: test → build → push image → **update helm values.yaml in Git**
+- CI produces artifacts and bumps the GitOps desired state

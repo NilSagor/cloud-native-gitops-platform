@@ -1,0 +1,3 @@
+image:
+  repository: ghcr.io/CHANGE_ME/product-api
+  tag: dev
