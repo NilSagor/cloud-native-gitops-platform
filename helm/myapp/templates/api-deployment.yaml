@@ -1,0 +1,19 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: product-api
+  labels: { app: product-api }
+spec:
+  replicas: {{ .Values.replicaCount }}
+  selector: { matchLabels: { app: product-api } }
+  template:
+    metadata:
+      labels: { app: product-api }
+    spec:
+      containers:
+        - name: api
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          ports: [{ containerPort: 8080 }]
+          env: [{ name: REDIS_HOST, value: redis }]
+          resources: {{ toYaml .Values.resources | nindent 12 }}
